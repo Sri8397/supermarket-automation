@@ -1,0 +1,254 @@
+<% layout('layout/boiler_plate')%>
+
+<script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/axios/1.6.8/axios.min.js"></script>
+
+<div style="margin: auto;">
+    <form autocomplete="off" onsubmit="handleSubmit(event)">
+        <h2>Item Details</h2>
+        <br>
+        <div class="row clearfix">
+            <div class="col-md-12">
+                <table class="table table-bordered table-hover" id="tab_logic">
+                    <thead>
+                        <tr>
+                            <th class="text-center"> # </th>
+                            <th class="text-center" style="width: 10%;"> Code </th>
+                            <th class="text-center"> Product </th>
+                            <th class="text-center" style="width: 20%;"> Qty </th>
+                            <th class="text-center"> Price </th>
+                            <th class="text-center"> Total </th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr id='addr0'>
+                            <td>1</td>
+                            <td><input type="text" name='code[]' placeholder='#' class="form-control id" readonly/></td>
+                            <td><input type="search" name='product[]'  placeholder='Enter Product Name' class="form-control" oninput="myfunc(this)"  required/>
+                                <ul class="dropdownitems" id="allItems0">
+                                    <%for (var i=0;i<items.length;i++){%>
+                                    <li style="text-align: left;" value="<%=items[i]._id%>" onclick="putitem(this,<%=JSON.stringify(items[i])%>)"><a href="#"><%=items[i].item_name%></a></li>
+                                    <%}%>
+                                </ul></td>
+                            <td><input type="number" name='qty[]' value="0" max="0" placeholder='Enter Qty' class="form-control qty" step="1" min="0"/></td>
+                            <td><input type="number" name='price[]' placeholder='Unit Price' class="form-control price" readonly/></td>
+                            <td><input type="number" value="0" name='total[]' placeholder='0.00' class="form-control total" readonly/></td>
+
+                        </tr>
+                        <tr id='addr1'></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        <div class="row clearfix">
+            <div class="col-md-12">
+                <button type="button" id="add_row" class="btn btn-outline-success pull-left">Add Row</button>
+                <button type="button" id='delete_row' class="pull-right btn btn-outline-danger">Delete Row</button>
+            </div>
+        </div>
+
+        <br>
+
+        <div class="row clearfix" style="margin-top:20px">
+            <div class="pull-right col-md-4">
+                <table class="table table-bordered table-hover" id="tab_logic_total">
+                    <tbody>
+                        <tr>
+                            <th class="text-center">Sub Total</th>
+                            <td class="text-center"><input type="number" value="0" name='sub_total' placeholder='0.00' class="form-control" id="sub_total" readonly/></td>
+                        </tr>
+                        <tr>
+                            <th class="text-center">Tax</th>
+                            <td class="text-center"><div class="input-group mb-2 mb-sm-0">
+                                    <input type="number" class="form-control" id="tax" name="tax" min="0" value="0" placeholder="0">
+                                    <div class="input-group-addon"> %</div>
+                                </div></td>
+                        </tr>
+                        <tr>
+                            <th class="text-center">Tax Amount</th>
+                            <td class="text-center"><input type="number" value="0" name='tax_amount' id="tax_amount" placeholder='0.00' class="form-control" readonly/></td>
+                        </tr>
+                        <tr>
+                            <th class="text-center">Grand Total</th>
+                            <td class="text-center"><input type="number" value="0" name='total_amount' id="total_amount" placeholder='0.00' class="form-control" readonly/></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        <br>
+        <button type="submit button" class="btn btn-lg btn-primary">Create Bill</button>
+        <br>
+    </form>
+    <br>
+</div>
+
+<style>
+    .dropdownitems{
+        max-height:30vh;
+        overflow:auto;
+    }
+</style>
+
+<script>
+    $(document).ready(function(){
+        var i=1;
+        $("#add_row").click(function(){b=i-1;
+            $('#addr'+i).html($('#addr'+b).html()).find('td:first-child').html(i+1);
+            $('#addr'+i).find('#allItems'+b).attr("id","allItems"+i);
+            $('#tab_logic').append('<tr id="addr'+(i+1)+'"></tr>');
+            i++;
+        });
+        $("#delete_row").click(function(){
+            if(i>1){
+                $("#addr"+(i-1)).html('');
+                i--;
+            }
+            else{
+                alert("Bill must have atleast 1 item!!")
+            }
+            calc();
+        });
+
+        $('#tab_logic tbody').on('keyup change',function(){
+            calc();
+        });
+        $('#tax').on('keyup change',function(){
+            calc_total();
+        });
+    });
+
+    function calc()
+    {
+        $('#tab_logic tbody tr').each(function(i, element) {
+            var html = $(this).html();
+            if(html!='')
+            {
+                var qty = $(this).find('.qty').val();
+                var price = $(this).find('.price').val();
+                $(this).find('.total').val(qty*price);
+
+                calc_total();
+            }
+        });
+    }
+
+    async function handleSubmit(event) {
+        event.preventDefault();
+        try {
+            const { data: { key } } = await axios.get('getKey');
+            console.log(key)
+            // const amount = 500
+            const amount = Math.round(100 * document.getElementById('total_amount').value)
+
+            const currentYear = new Date().getFullYear()
+            const payload = {
+                amount,
+                year: currentYear
+            }
+
+            const { data: { order } } = await axios.post('checkout', payload);
+            console.log(order)
+
+            let options = {
+                "key": key, // Enter the Key ID generated from the Dashboard
+                "amount": order.amount,
+                // Amount is in currency subunits. Default currency is INR. Hence, 50000 refers to 50000 paise
+                "currency": "INR",
+                "name": "Supermarket", //your business name
+                "description": "Test Transaction",
+                "image": "https://example.com/your_logo",
+                "order_id": order.id, //This is a sample Order ID. Pass the `id` obtained in the response of Step 1
+                "handler": async function (response){
+                    const res = await axios.post('verify', response);
+                    console.log(res.data)
+                    if (res.data.success) {
+                        const form = document.querySelector("form")
+                        form.action = '/bill';
+                        form.method = 'POST';
+                        form.submit()
+                    }
+                },
+                "prefill": { //We recommend using the prefill parameter to auto-fill customer's contact information, especially their phone number
+                    "name": "Gaurav Kumar", //your customer's name
+                    "email": "gaurav.kumar@example.com",
+                    "contact": "9000090000"  //Provide the customer's phone number for better conversion rates
+                },
+                "notes": {
+                    "address": "Razorpay Corporate Office"
+                },
+                "theme": {
+                    "color": "#3399cc"
+                }
+            };
+            let rzp1 = new Razorpay(options);
+            rzp1.open();
+            rzp1.on('payment.failed', function (response){
+                console.log("error ", response.error);
+            });
+        } catch (e) {
+            console.log(e)
+        }
+    }
+
+    function calc_total()
+    {
+        let total=0;
+        $('.total').each(function() {
+            total += parseInt($(this).val());
+        });
+        $('#sub_total').val(total.toFixed(2));
+        let tax_sum=total/100*$('#tax').val();
+        $('#tax_amount').val(tax_sum.toFixed(2));
+        $('#total_amount').val((tax_sum+total).toFixed(2));
+    }
+
+    function myfunc(y)
+    {
+        x=y.parentElement.parentElement.id
+        x=x.substring(4)
+
+        let z=document.getElementById("addr"+x)
+        z.children[1].children[0].value='#'
+        z.children[3].children[0].value=0
+        z.children[3].children[0].max=0
+        z.children[4].children[0].value=''
+        z.children[5].children[0].value=0
+
+        let input, filter, ul, li, a, i, txtValue;
+        input = y;
+        filter = input.value.toUpperCase();
+
+        ul = document.getElementById("allItems"+x);
+        ul.style.display="block";
+        li = ul.getElementsByTagName('li');
+
+
+        for (i = 0; i < li.length; i++) {
+            a = li[i].getElementsByTagName("a")[0];
+            txtValue = a.textContent || a.innerText;
+            if (txtValue.toUpperCase().indexOf(filter) > -1) {
+                li[i].style.display = "";
+            } else {
+                li[i].style.display = "none";
+            }
+        }
+    }
+
+    function putitem(y,i)
+    {
+        x=y.parentElement.parentElement.parentElement.id
+        x=x.substring(4)
+
+        <%i=JSON.parse(i)%>
+
+        let input, filter, ul, li, a, txtValue;
+        ul = document.getElementById("allItems"+x);
+        ul.style.display="none"
+        input=document.getElementById("addr"+x)
+        input.children[1].children[0].value=i.item_code
+        input.children[2].children[0].value=i.item_name
+        input.children[3].children[0].max=i.quantity
+        input.children[4].children[0].value=i.unit_price
+    }
+</script>
